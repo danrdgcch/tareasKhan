@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mis tareas · Khan Academy</title>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     CONSULTA DE TAREAS — Khan Academy
+     Profe Dani · CCH-UNAM
+
+     CÓMO USAR:
+       1. Sube este archivo a tu repositorio (danrdgcch.github.io)
+       2. Sube los .xlsx de cada grupo a la raíz del repo
+       3. Ajusta la constante GRUPOS (línea 28) si cambian los nombres
+
+     QUÉ BUSCA EN EL EXCEL (sin importar mayúsculas ni acentos):
+       · Hoja            → la que se llame "Calificaciones" (si no, la primera)
+       · Núm. de cuenta  → "No." / "cuenta" / "matrícula"; si no, detecta la
+                           columna con números de 7 a 10 dígitos
+       · Nombre          → "NOMBRE DE PILA" y si no, "NOMBRE"
+       · Promedio        → "Khan Academy" y si no, "Promedio tareas"
+       · Peso en la      → "Porcentaje Tareas 15%" (el número se lee del
+         calificación      encabezado, no está fijo en el código)
+       · Tareas sueltas  → "Khan 1", "Khan S2"… (opcional, si algún día las agregas)
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<script>
+/* ─── EDITA AQUÍ PARA AGREGAR O QUITAR GRUPOS ─────────────────────────────
+     Izquierda: lo que ve el alumno. Derecha: el archivo en el repositorio.
+     Si el archivo tiene otro nombre, la página también prueba con y sin
+     cero inicial y en mayúsculas/minúsculas.                               */
+const GRUPOS = [
+  ["160A", "0160A.xlsx"],
+  ["162A", "0162A.xlsx"],
+  ["174A", "0174A.xlsx"],
+  ["350A", "0350A.xlsx"],
+  ["370A", "0370A.xlsx"],
+  ["557",  "0557.xlsx"]
+];
+
+/* ─── EDITA AQUÍ LOS RANGOS Y LOS MENSAJES (escala 0 a 10) ────────────
+     "max" es el tope de cada rango. Se evalúan de arriba hacia abajo.   */
+const RANGOS = [
+  { max: 0.99, nivel: "critico",
+    titulo: "Vas muy mal",
+    cuerpo: "Necesitas mejorar mucho. Si necesitas ayuda, dile a tu profesor sin miedo o asiste a asesorías, pero necesitas echarle ganas." },
+
+  { max: 4.99, nivel: "mal",
+    titulo: "Vas mal",
+    cuerpo: "Si necesitas ayuda, dile a tu profesor sin miedo o asiste a asesorías, pero necesitas echarle ganas." },
+
+  { max: 5.99, nivel: "bajo",
+    titulo: "Vas mal, pero puedes mejorar",
+    cuerpo: "" },
+
+  { max: 7.99, nivel: "medio",
+    titulo: "Vamos, tú puedes mejorar",
+    cuerpo: "" },
+
+  { max: 8.99, nivel: "bien",
+    titulo: "Vas bien, pero puedes mejorar",
+    cuerpo: "" },
+
+  { max: 10.0, nivel: "muybien",
+    titulo: "Vas muy bien",
+    cuerpo: "Mantente así." }
+];
+</script>
+
+<style>
+  :root{
+    --azul:#007AFF; --azul-suave:#E8F1FF;
+    --verde:#30B15C; --verde-suave:#E4F6EA;
+    --amarillo:#C99400; --amarillo-suave:#FDF3DC;
+    --naranja:#E07B15; --naranja-suave:#FDEEDD;
+    --rojo:#D9342B; --rojo-suave:#FCE9E8;
+    --vino:#9B1C2E; --vino-suave:#F7E4E7;
+    --gris:#8A8A8E; --gris-suave:#F0F0F3;
+    --fondo:#F2F2F7; --tarjeta:#FFFFFF; --tinta:#1C1C1E;
+    --borde:rgba(60,60,67,.12);
+    --sombra:0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+    background:var(--fondo); color:var(--tinta);
+    min-height:100dvh; display:flex; flex-direction:column; align-items:center;
+    padding:32px 20px 56px; line-height:1.45;
+  }
+  .envoltura{width:100%;max-width:520px}
+
+  header{text-align:center;margin-bottom:26px}
+  header h1{font-size:26px;font-weight:700;letter-spacing:-.4px}
+  header p{font-size:15px;color:var(--gris);margin-top:4px}
+
+  .tarjeta{
+    background:var(--tarjeta);border-radius:22px;padding:24px;
+    box-shadow:var(--sombra);margin-bottom:16px;
+  }
+
+  label{display:block;font-size:13px;font-weight:600;color:var(--gris);margin-bottom:7px}
+  select,input{
+    width:100%;font:inherit;font-size:17px;color:var(--tinta);
+    background:var(--gris-suave);border:1.5px solid transparent;border-radius:14px;
+    padding:14px 15px;appearance:none;transition:border-color .15s,background .15s;
+  }
+  select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238A8A8E' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 16px center;padding-right:40px}
+  select:focus,input:focus{outline:none;background:#fff;border-color:var(--azul)}
+  select:focus-visible,input:focus-visible,button:focus-visible{outline:3px solid rgba(0,122,255,.35);outline-offset:2px}
+  .campo{margin-bottom:16px}
+  button{
+    width:100%;font:inherit;font-size:17px;font-weight:600;color:#fff;
+    background:var(--azul);border:none;border-radius:14px;padding:15px;cursor:pointer;
+    transition:filter .15s;
+  }
+  button:hover{filter:brightness(1.07)}
+  button:active{filter:brightness(.92)}
+  button[disabled]{background:var(--gris);cursor:progress}
+  .secundario{background:transparent;color:var(--azul);font-weight:500;margin-top:4px}
+  .secundario:hover{filter:none;text-decoration:underline}
+
+  .aviso{
+    display:none;background:var(--rojo-suave);color:var(--rojo);
+    font-size:14.5px;border-radius:14px;padding:13px 15px;margin-bottom:16px;
+  }
+  .aviso.visible{display:block}
+
+  #resultado{display:none}
+  #resultado.visible{display:block}
+  .saludo{font-size:15px;color:var(--gris)}
+  .saludo strong{color:var(--tinta);font-weight:600}
+  .grupo-chip{
+    display:inline-block;font-size:12.5px;font-weight:600;color:var(--azul);
+    background:var(--azul-suave);border-radius:100px;padding:4px 11px;margin-top:10px;
+  }
+
+  .marcador{text-align:center;padding:30px 24px 26px}
+  .marcador .etiqueta{font-size:14px;color:var(--gris);margin-bottom:6px}
+  .cifra{font-size:76px;font-weight:700;letter-spacing:-3px;line-height:1;font-variant-numeric:tabular-nums}
+  .cifra .de10{font-size:26px;font-weight:600;letter-spacing:-.5px;color:var(--gris)}
+  .barra{height:10px;background:var(--gris-suave);border-radius:100px;margin:22px 0 10px;overflow:hidden}
+  .barra i{display:block;height:100%;border-radius:100px;width:0;transition:width .7s cubic-bezier(.2,.8,.25,1)}
+  .escala{display:flex;justify-content:space-between;font-size:12px;color:var(--gris);font-variant-numeric:tabular-nums}
+  .aporte{
+    font-size:14.5px;color:#3A3A3C;border-top:1px solid var(--borde);
+    margin-top:20px;padding-top:16px;
+  }
+  .aporte b{font-variant-numeric:tabular-nums}
+
+  .mensaje{padding:22px 24px}
+  .mensaje h2{font-size:19px;font-weight:700;letter-spacing:-.2px}
+  .mensaje p{font-size:15.5px;color:#3A3A3C;margin-top:8px}
+  .mensaje p + p{margin-top:10px}
+
+  .pendientes{margin-top:16px;border-top:1px solid var(--borde);padding-top:16px}
+  .pendientes p{font-size:15px}
+  details summary{
+    font-size:14.5px;font-weight:600;color:var(--azul);cursor:pointer;
+    margin-top:10px;list-style:none;
+  }
+  details summary::-webkit-details-marker{display:none}
+  details summary::after{content:" ⌄"}
+  details[open] summary::after{content:" ⌃"}
+  .lista{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+  .lista span{
+    font-size:13px;font-weight:600;background:var(--gris-suave);
+    border-radius:9px;padding:6px 10px;font-variant-numeric:tabular-nums;
+  }
+
+  .critico .cifra,.critico h2{color:var(--vino)}
+  .critico .barra i{background:var(--vino)}
+  .critico .mensaje{background:var(--vino-suave);border-radius:22px}
+  .mal .cifra,.mal h2{color:var(--rojo)}
+  .mal .barra i{background:var(--rojo)}
+  .mal .mensaje{background:var(--rojo-suave);border-radius:22px}
+  .bajo .cifra,.bajo h2{color:var(--naranja)}
+  .bajo .barra i{background:var(--naranja)}
+  .bajo .mensaje{background:var(--naranja-suave);border-radius:22px}
+  .medio .cifra,.medio h2{color:var(--amarillo)}
+  .medio .barra i{background:var(--amarillo)}
+  .medio .mensaje{background:var(--amarillo-suave);border-radius:22px}
+  .bien .cifra,.bien h2{color:var(--azul)}
+  .bien .barra i{background:var(--azul)}
+  .bien .mensaje{background:var(--azul-suave);border-radius:22px}
+  .muybien .cifra,.muybien h2{color:var(--verde)}
+  .muybien .barra i{background:var(--verde)}
+  .muybien .mensaje{background:var(--verde-suave);border-radius:22px}
+  .sinentregas .cifra,.sinentregas h2{color:var(--gris)}
+  .sinentregas .barra i{background:var(--gris)}
+  .sinentregas .mensaje{background:var(--gris-suave);border-radius:22px}
+
+  footer{font-size:13px;color:var(--gris);text-align:center;margin-top:8px}
+
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+  @media (max-width:400px){ .cifra{font-size:64px} body{padding:24px 14px 40px} }
+</style>
+</head>
+<body>
+<div class="envoltura">
+
+  <header>
+    <h1>Mis tareas</h1>
+    <p>Consulta tu promedio de Khan Academy</p>
+  </header>
+
+  <section id="acceso" class="tarjeta">
+    <div class="campo">
+      <label for="grupo">Grupo</label>
+      <select id="grupo"><option value="">Selecciona tu grupo</option></select>
+    </div>
+    <div class="campo">
+      <label for="cuenta">Número de cuenta</label>
+      <input id="cuenta" type="text" inputmode="numeric" autocomplete="off"
+             placeholder="Escribe tu número de cuenta" enterkeyhint="go">
+    </div>
+    <div id="aviso" class="aviso" role="alert"></div>
+    <button id="entrar">Ver mi promedio</button>
+  </section>
+
+  <section id="resultado">
+    <div class="tarjeta">
+      <p class="saludo">Hola, <strong id="nombre"></strong></p>
+      <span class="grupo-chip" id="chipGrupo"></span>
+    </div>
+
+    <div class="tarjeta marcador">
+      <p class="etiqueta">Promedio de tareas</p>
+      <p class="cifra"><span id="cifraTexto">0.00</span><span class="de10"> / 10</span></p>
+      <div class="barra"><i id="barra"></i></div>
+      <div class="escala"><span>0</span><span>6</span><span>10</span></div>
+      <p class="aporte" id="aporte" hidden></p>
+    </div>
+
+    <div class="tarjeta mensaje">
+      <h2 id="tituloMensaje"></h2>
+      <div id="cuerpoMensaje"></div>
+      <div id="pendientes" class="pendientes" hidden></div>
+    </div>
+
+    <button class="secundario" id="salir">Consultar otra cuenta</button>
+  </section>
+
+  <footer>Profe Dani · CCH-UNAM</footer>
+</div>
+
+<script>
+/* ═══ Utilidades ═══════════════════════════════════════════════════════ */
+const norm = t => String(t ?? "")
+  .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+  .replace(/\s+/g," ")
+  .toLowerCase().trim();
+
+// Dos decimales SIN redondear (trunca), igual que el dashboard principal
+const dec2 = n => (Math.trunc(n * 100) / 100).toFixed(2);
+
+const numero = v => {
+  if (v === null || v === undefined) return null;
+  const s = String(v).replace(/[%\s]/g,"").replace(",",".");
+  if (s === "") return null;
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+};
+
+const esVacio = v => v === null || v === undefined || String(v).trim() === "";
+
+/* ═══ Formulario ═══════════════════════════════════════════════════════ */
+const selGrupo = document.getElementById("grupo");
+GRUPOS.forEach(([clave]) => {
+  const o = document.createElement("option");
+  o.value = clave; o.textContent = "Grupo " + clave;
+  selGrupo.appendChild(o);
+});
+
+const archivoDe = clave => (GRUPOS.find(g => g[0] === clave) || [])[1];
+
+const aviso = document.getElementById("aviso");
+const mostrarAviso = t => { aviso.textContent = t; aviso.classList.add("visible"); };
+const limpiarAviso = () => aviso.classList.remove("visible");
+
+/* ═══ Lectura del Excel ════════════════════════════════════════════════ */
+const cacheHojas = {};
+
+/* Nombres alternativos del archivo: con y sin cero inicial, en mayúsculas
+   y en minúsculas. GitHub Pages distingue mayúsculas de minúsculas.      */
+function candidatos(archivo){
+  const base = String(archivo).replace(/\.xlsx$/i, "");
+  const raices = [ base, base.replace(/^0+/, ""), "0" + base.replace(/^0+/, "") ];
+  const lista = new Set();
+  raices.forEach(r => {
+    lista.add(r + ".xlsx");
+    lista.add(r.toUpperCase() + ".xlsx");
+    lista.add(r.toLowerCase() + ".xlsx");
+    lista.add(r + ".XLSX");
+  });
+  return [...lista];
+}
+
+async function cargarGrupo(grupo){
+  if (cacheHojas[grupo]) return cacheHojas[grupo];
+
+  let buffer = null, usado = null;
+  const intentos = candidatos(archivoDe(grupo));
+  for (const nombre of intentos){
+    try{
+      const resp = await fetch(encodeURIComponent(nombre) + "?v=" + Date.now());
+      if (resp.ok){ buffer = await resp.arrayBuffer(); usado = nombre; break; }
+    } catch(_){ /* sigue con el siguiente nombre */ }
+  }
+  if (!buffer){
+    const e = new Error("archivo"); e.intentos = intentos; throw e;
+  }
+  console.log("Archivo leído:", usado);
+
+  const libro = XLSX.read(buffer, { type:"array" });
+
+  // La hoja de Asistencia también trae una columna "Khan Academy":
+  // hay que quedarse con la de Calificaciones.
+  const nombreHoja =
+    libro.SheetNames.find(n => /calificacion/.test(norm(n))) || libro.SheetNames[0];
+
+  const matriz = XLSX.utils.sheet_to_json(libro.Sheets[nombreHoja],
+    { header:1, defval:null, raw:true });
+
+  const datos = interpretar(matriz);
+  cacheHojas[grupo] = datos;
+  return datos;
+}
+
+/* Encuentra la fila de encabezados aunque no sea la primera del archivo */
+function interpretar(matriz){
+  let filaEnc = -1;
+  for (let i = 0; i < Math.min(matriz.length, 20); i++){
+    const fila = (matriz[i] || []).map(norm);
+    const tieneNombre = fila.some(c => c.includes("nombre"));
+    const tieneTareas = fila.some(c => c.includes("khan") || c.includes("tarea"));
+    if (tieneNombre && tieneTareas){ filaEnc = i; break; }
+  }
+  if (filaEnc === -1){
+    for (let i = 0; i < Math.min(matriz.length, 20); i++){
+      if ((matriz[i]||[]).some(c => norm(c).includes("khan"))){ filaEnc = i; break; }
+    }
+  }
+  if (filaEnc === -1) throw new Error("encabezados");
+
+  const encabezados = (matriz[filaEnc] || []).map(c => String(c ?? "").trim());
+  const filas = matriz.slice(filaEnc + 1).filter(f => f && f.some(c => !esVacio(c)));
+  return { encabezados, filas, mapa: mapearColumnas(encabezados, filas) };
+}
+
+/* ¿La columna c contiene números de cuenta (7 a 10 dígitos)? */
+function pareceCuenta(filas, c){
+  let aciertos = 0;
+  for (const f of filas) if (/^\d{7,10}$/.test(String(f[c] ?? "").trim())) aciertos++;
+  return aciertos;
+}
+
+function mapearColumnas(enc, filas){
+  const m = { cuenta:-1, nombre:-1, promedio:-1, respaldoProm:-1,
+              colPeso:-1, peso:null, tareas:[] };
+
+  enc.forEach((h, i) => {
+    const n = norm(h);
+    if (!n) return;
+
+    // Cuenta: encabezados explícitos, o "No." si de verdad trae cuentas
+    if (m.cuenta === -1){
+      if (/(cuenta|matricula)/.test(n)) m.cuenta = i;
+      else if (/^no\.?$/.test(n) && pareceCuenta(filas, i) >= 3) m.cuenta = i;
+    }
+
+    if (/nombre de pila/.test(n)) m.nombre = i;
+    else if (m.nombre === -1 && /^nombre/.test(n)) m.nombre = i;
+
+    // Peso de las tareas en la calificación final: "Porcentaje Tareas 15%"
+    if (/porcentaje/.test(n) && /tarea/.test(n)){
+      m.colPeso = i;
+      const p = n.match(/(\d+(?:\.\d+)?)\s*%/);
+      if (p) m.peso = parseFloat(p[1]);
+    }
+    // Respaldo del promedio, por si no hubiera columna de Khan
+    else if (/promedio/.test(n) && /tarea/.test(n)) m.respaldoProm = i;
+
+    if (/khan/.test(n)){
+      // "Khan 1", "Khan S3" → tarea individual · "Khan Academy" → promedio
+      if (/\d/.test(n.replace(/academy/g,""))) m.tareas.push({ i, titulo:h.trim() });
+      else if (m.promedio === -1) m.promedio = i;
+    }
+  });
+
+  if (m.promedio === -1) m.promedio = m.respaldoProm;
+
+  // Respaldo final: la columna que más parezca traer números de cuenta
+  if (m.cuenta === -1){
+    let mejor = -1, top = 0;
+    for (let c = 0; c < enc.length; c++){
+      const a = pareceCuenta(filas, c);
+      if (a > top){ top = a; mejor = c; }
+    }
+    if (top >= 3) m.cuenta = mejor;
+  }
+
+  return m;
+}
+
+/* ═══ Cálculo ══════════════════════════════════════════════════════════ */
+function analizar(fila, mapa){
+  const tareas = mapa.tareas.map(t => ({
+    titulo: t.titulo,
+    valor: numero(fila[t.i]),
+    entregada: !esVacio(fila[t.i])
+  }));
+
+  const total      = tareas.length;
+  const entregadas = tareas.filter(t => t.entregada).length;
+  const faltantes  = tareas.filter(t => !t.entregada);
+
+  let prom = mapa.promedio !== -1 ? numero(fila[mapa.promedio]) : null;
+  if (prom === null && total > 0){
+    prom = tareas.reduce((a,t) => a + (t.valor ?? 0), 0) / total;
+  }
+
+  const sinEntregas = (total > 0 && entregadas === 0) || (total === 0 && prom === null);
+
+  // Puntos que aportan las tareas a la calificación final
+  let puntos = null, puntosMax = null;
+  if (mapa.peso !== null){
+    puntosMax = mapa.peso / 10;
+    puntos = mapa.colPeso !== -1 ? numero(fila[mapa.colPeso]) : null;
+    if (puntos === null && prom !== null) puntos = prom * (mapa.peso / 100);
+  }
+
+  return { prom, total, entregadas, faltantes, sinEntregas,
+           peso:mapa.peso, puntos, puntosMax };
+}
+
+const nivelDe = prom => RANGOS.find(r => prom <= r.max) || RANGOS[RANGOS.length-1];
+
+/* ═══ Retroalimentación ════════════════════════════════════════════════ */
+function redactar(a){
+  if (a.sinEntregas){
+    return {
+      nivel:"sinentregas",
+      titulo:"Aún no tienes calificación de tareas",
+      cuerpo:["No apareces con ningún registro en Khan Academy. Si crees que sí entregaste, avísame en clase para revisarlo."]
+    };
+  }
+  const r = nivelDe(a.prom);
+  return { nivel:r.nivel, titulo:r.titulo, cuerpo: r.cuerpo ? [r.cuerpo] : [] };
+}
+
+/* ═══ Pintar ═══════════════════════════════════════════════════════════ */
+const secAcceso = document.getElementById("acceso");
+const secRes    = document.getElementById("resultado");
+
+function pintar(nombre, grupo, a){
+  const texto = redactar(a);
+  const prom  = a.sinEntregas ? 0 : (a.prom ?? 0);
+
+  secRes.className = "visible " + texto.nivel;
+  document.getElementById("nombre").textContent     = nombre || "alumno";
+  document.getElementById("chipGrupo").textContent  = "Grupo " + grupo;
+  document.getElementById("cifraTexto").textContent = a.sinEntregas ? "—" : dec2(prom);
+
+  const barra = document.getElementById("barra");
+  barra.style.width = "0";
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    barra.style.width = Math.max(0, Math.min(100, (prom/10)*100)) + "%";
+  }));
+
+  const aporte = document.getElementById("aporte");
+  if (a.peso !== null && a.puntos !== null && a.puntosMax !== null){
+    aporte.hidden = false;
+    aporte.innerHTML = `Las tareas valen <b>${a.peso}%</b> de tu calificación final. ` +
+      `Ahorita aportas <b>${dec2(a.puntos)}</b> de <b>${dec2(a.puntosMax)}</b> puntos.`;
+  } else {
+    aporte.hidden = true;
+  }
+
+  document.getElementById("tituloMensaje").textContent = texto.titulo;
+  document.getElementById("cuerpoMensaje").innerHTML =
+    texto.cuerpo.map(p => `<p>${p}</p>`).join("");
+
+  const cajaPend = document.getElementById("pendientes");
+  if (a.total > 0){
+    cajaPend.hidden = false;
+    let html = `<p><strong>${a.entregadas} de ${a.total}</strong> tareas entregadas.</p>`;
+    if (a.faltantes.length){
+      html += `<details><summary>Ver las ${a.faltantes.length} que te faltan</summary>
+        <div class="lista">${a.faltantes.map(t=>`<span>${t.titulo}</span>`).join("")}</div>
+      </details>`;
+    }
+    cajaPend.innerHTML = html;
+  } else {
+    cajaPend.hidden = true;
+  }
+
+  secAcceso.style.display = "none";
+  window.scrollTo({ top:0, behavior:"instant" });
+}
+
+/* ═══ Consulta ═════════════════════════════════════════════════════════ */
+const btn = document.getElementById("entrar");
+
+async function consultar(){
+  limpiarAviso();
+  const grupo  = selGrupo.value;
+  const cuenta = document.getElementById("cuenta").value.trim();
+
+  if (!grupo)  return mostrarAviso("Selecciona tu grupo.");
+  if (!cuenta) return mostrarAviso("Escribe tu número de cuenta.");
+
+  btn.disabled = true; btn.textContent = "Buscando…";
+  try{
+    const { filas, mapa } = await cargarGrupo(grupo);
+
+    if (mapa.cuenta === -1)
+      return mostrarAviso("El archivo del grupo no tiene una columna de número de cuenta.");
+    if (mapa.promedio === -1 && mapa.tareas.length === 0)
+      return mostrarAviso("El archivo del grupo no tiene columnas de Khan Academy.");
+
+    const buscado = cuenta.replace(/\D/g,"");
+    const fila = filas.find(f => String(f[mapa.cuenta] ?? "").replace(/\D/g,"") === buscado);
+
+    if (!fila)
+      return mostrarAviso("No encontramos ese número de cuenta en el grupo " + grupo + ". Revisa que los dos datos sean correctos.");
+
+    const nombre = mapa.nombre !== -1 ? String(fila[mapa.nombre] ?? "").trim() : "";
+    pintar(nombre, grupo, analizar(fila, mapa));
+
+  } catch(e){
+    if (e.message === "archivo")
+      mostrarAviso("No se encontró el archivo del grupo " + grupo +
+        ". Revisa que esté subido al repositorio con alguno de estos nombres: " +
+        (e.intentos || []).slice(0,4).join(", "));
+    else if (e.message === "encabezados")
+      mostrarAviso("El archivo del grupo " + grupo + " no tiene un formato reconocible. Revisa que la hoja Calificaciones tenga los encabezados en su lugar.");
+    else
+      mostrarAviso("Ocurrió un error al leer las calificaciones: " + e.message);
+    console.error(e);
+  } finally {
+    btn.disabled = false; btn.textContent = "Ver mi promedio";
+  }
+}
+
+btn.addEventListener("click", consultar);
+document.getElementById("cuenta").addEventListener("keydown", e => {
+  if (e.key === "Enter") consultar();
+});
+document.getElementById("salir").addEventListener("click", () => {
+  secRes.className = "";
+  secAcceso.style.display = "";
+  document.getElementById("cuenta").value = "";
+  limpiarAviso();
+  document.getElementById("cuenta").focus();
+});
+</script>
+</body>
+</html>
